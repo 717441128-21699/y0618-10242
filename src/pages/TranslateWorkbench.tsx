@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -24,13 +24,22 @@ import { cn } from '../lib/utils';
 
 export default function TranslateWorkbench() {
   const { id } = useParams<{ id: string }>();
-  const { currentProject, loading, updateCue, claimSegment, releaseSegment } = useProjectStore();
-  const { currentUser, users } = useUserStore();
+  const { currentProject, loading, updateTranslation, claimSegment, releaseSegment, ensureTargetLanguage, completeSegment } = useProjectStore();
+  const { currentUser, users, recordTranslation } = useUserStore();
   const { addNotification } = useNotificationStore();
-  const { currentTime, setSelectedCueId, selectedCueId } = useEditorStore();
+  const { setSelectedCueId, selectedCueId } = useEditorStore();
   
   const [targetLanguage, setTargetLanguage] = useState('zh-CN');
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [lastSavedCueId, setLastSavedCueId] = useState<string | null>(null);
+  const [lastSavedLang, setLastSavedLang] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentProject) {
+      ensureTargetLanguage(currentProject.id, targetLanguage);
+    }
+  }, [currentProject, targetLanguage, ensureTargetLanguage]);
 
   if (loading) {
     return (
@@ -57,24 +66,41 @@ export default function TranslateWorkbench() {
   }
 
   const sourceCues = currentProject.subtitles[currentProject.sourceLanguage] || [];
-  const targetCues = currentProject.subtitles[targetLanguage] || sourceCues;
+  const targetCues = currentProject.subtitles[targetLanguage] || [];
 
-  const handleUpdateTranslation = (cueId: string, translation: string) => {
-    const sourceCue = sourceCues.find(c => c.id === cueId);
-    if (sourceCue) {
-      updateCue(currentProject.id, currentProject.sourceLanguage, cueId, {
-        translation,
-        status: 'translating',
-      });
+  const getTargetCue = (cueId: string) => targetCues.find(c => c.id === cueId);
+
+  const selectedCue = sourceCues.find(c => c.id === selectedCueId) || sourceCues[0];
+  const selectedTargetCue = selectedCue ? getTargetCue(selectedCue.id) : undefined;
+
+  // Sync draft text when selected cue or language changes
+  useEffect(() => {
+    if (selectedTargetCue) {
+      setDraftText(selectedTargetCue.text || '');
+    } else {
+      setDraftText('');
+    }
+    setLastSavedCueId(null);
+    setLastSavedLang(null);
+  }, [selectedCue?.id, targetLanguage]);
+
+  const handleDraftChange = (value: string) => {
+    setDraftText(value);
+    if (selectedCue) {
+      updateTranslation(currentProject.id, targetLanguage, selectedCue.id, value, 'translating');
     }
   };
 
-  const handleBlur = (cueId: string) => {
-    const sourceCue = sourceCues.find(c => c.id === cueId);
-    if (sourceCue && sourceCue.translation) {
-      updateCue(currentProject.id, currentProject.sourceLanguage, cueId, {
-        status: 'translated',
-      });
+  const handleBlurSave = () => {
+    if (!selectedCue) return;
+    const trimmed = draftText.trim();
+    if (trimmed) {
+      updateTranslation(currentProject.id, targetLanguage, selectedCue.id, trimmed, 'translated');
+      if (currentUser && (lastSavedCueId !== selectedCue.id || lastSavedLang !== targetLanguage)) {
+        recordTranslation(currentUser.id, currentProject.id, currentProject.name, selectedCue.id);
+        setLastSavedCueId(selectedCue.id);
+        setLastSavedLang(targetLanguage);
+      }
     }
   };
 
@@ -91,12 +117,18 @@ export default function TranslateWorkbench() {
     addNotification('info', '已释放该区间');
   };
 
+  const handleCompleteSegment = (segmentId: string) => {
+    completeSegment(currentProject.id, segmentId);
+    addNotification('success', '区间标记为已完成');
+  };
+
   const handleSave = () => {
-    addNotification('success', '翻译已自动保存');
+    handleBlurSave();
+    addNotification('success', '翻译已保存');
   };
 
   const navigateCue = (direction: 'prev' | 'next') => {
-    const currentIndex = sourceCues.findIndex(c => c.id === selectedCueId);
+    const currentIndex = sourceCues.findIndex(c => c.id === selectedCue?.id);
     if (direction === 'prev' && currentIndex > 0) {
       setSelectedCueId(sourceCues[currentIndex - 1].id);
     } else if (direction === 'next' && currentIndex < sourceCues.length - 1) {
@@ -108,7 +140,9 @@ export default function TranslateWorkbench() {
     const currentIndex = sourceCues.findIndex(c => c.id === currentId);
     return {
       prev: currentIndex > 0 ? sourceCues[currentIndex - 1] : null,
+      prevTarget: currentIndex > 0 ? getTargetCue(sourceCues[currentIndex - 1].id) : null,
       next: currentIndex < sourceCues.length - 1 ? sourceCues[currentIndex + 1] : null,
+      nextTarget: currentIndex < sourceCues.length - 1 ? getTargetCue(sourceCues[currentIndex + 1].id) : null,
     };
   };
 
@@ -125,8 +159,7 @@ export default function TranslateWorkbench() {
     { source: 'Natural Language Processing', target: '自然语言处理' },
   ];
 
-  const selectedCue = sourceCues.find(c => c.id === selectedCueId);
-  const { prev: prevCue, next: nextCue } = selectedCue ? getContextCues(selectedCue.id) : { prev: null, next: null };
+  const { prev: prevCue, prevTarget, next: nextCue, nextTarget } = selectedCue ? getContextCues(selectedCue.id) : { prev: null, prevTarget: null, next: null, nextTarget: null };
 
   return (
     <div className="space-y-4">
@@ -198,7 +231,7 @@ export default function TranslateWorkbench() {
 
               {selectedCue && (
                 <motion.div
-                  key={selectedCue.id}
+                  key={`${selectedCue.id}-${targetLanguage}`}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/30 mb-3"
@@ -254,42 +287,52 @@ export default function TranslateWorkbench() {
                 <h3 className="font-semibold text-white">译文 ({LANGUAGE_NAMES[targetLanguage]})</h3>
               </div>
 
-              {prevCue && prevCue.translation && (
+              {prevCue && prevTarget && prevTarget.text && (
                 <div className="mb-3 p-3 rounded-lg bg-dark-700/30 opacity-60">
                   <p className="text-xs text-dark-400 mb-1">上句译文</p>
-                  <p className="text-sm text-dark-300">{prevCue.translation}</p>
+                  <p className="text-sm text-dark-300">{prevTarget.text}</p>
                 </div>
               )}
 
               {selectedCue && (
                 <motion.div
-                  key={`trans-${selectedCue.id}`}
+                  key={`trans-${selectedCue.id}-${targetLanguage}`}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="mb-3"
                 >
                   <textarea
-                    value={selectedCue.translation || ''}
-                    onChange={(e) => handleUpdateTranslation(selectedCue.id, e.target.value)}
-                    onBlur={() => handleBlur(selectedCue.id)}
+                    value={draftText}
+                    onChange={(e) => handleDraftChange(e.target.value)}
+                    onBlur={handleBlurSave}
                     rows={4}
                     className="w-full p-4 rounded-xl bg-accent-500/10 border border-accent-500/30 text-accent-400 placeholder-dark-500 focus:outline-none focus:border-accent-500 transition-colors resize-none text-lg leading-relaxed"
                     placeholder="在此输入译文..."
                     autoFocus
                   />
+                  {selectedTargetCue && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded text-white',
+                        STATUS_COLORS[selectedTargetCue.status]
+                      )}>
+                        {STATUS_LABELS[selectedTargetCue.status]}
+                      </span>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
-              {nextCue && nextCue.translation && (
+              {nextCue && nextTarget && nextTarget.text && (
                 <div className="p-3 rounded-lg bg-dark-700/30 opacity-60">
                   <p className="text-xs text-dark-400 mb-1">下句译文</p>
-                  <p className="text-sm text-dark-300">{nextCue.translation}</p>
+                  <p className="text-sm text-dark-300">{nextTarget.text}</p>
                 </div>
               )}
 
               <div className="mt-4 flex items-center justify-between text-xs text-dark-400">
-                <span>字数: {selectedCue?.translation?.length || 0}</span>
-                <span>快捷键: Ctrl+Enter 保存并下一句</span>
+                <span>字数: {draftText.length}</span>
+                <span>失焦自动保存当前语言译文</span>
               </div>
             </div>
           </div>
@@ -316,7 +359,12 @@ export default function TranslateWorkbench() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="p-3 rounded-lg bg-dark-700/50 hover:bg-dark-700 transition-colors cursor-pointer group"
-                  onClick={() => selectedCue && handleUpdateTranslation(selectedCue.id, term.target)}
+                  onClick={() => {
+                    if (selectedCue) {
+                      const newText = draftText + term.target;
+                      handleDraftChange(newText);
+                    }
+                  }}
                 >
                   <p className="text-xs text-dark-400">{term.source}</p>
                   <p className="text-sm text-accent-400 group-hover:text-accent-300">{term.target}</p>
@@ -369,40 +417,41 @@ export default function TranslateWorkbench() {
                 </div>
 
                 <div className="p-3 space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
-                  {segmentCues.map((cue) => (
-                    <div
-                      key={cue.id}
-                      onClick={() => {
-                        if (canEdit) {
-                          setSelectedCueId(cue.id);
-                          const seekTo = useEditorStore.getState().seekTo;
-                          seekTo?.(cue.startTime);
-                        }
-                      }}
-                      className={cn(
-                        'p-2 rounded-lg transition-colors',
-                        selectedCueId === cue.id
-                          ? 'bg-accent-500/20 border border-accent-500/30'
-                          : canEdit
-                          ? 'bg-dark-700/50 hover:bg-dark-700 cursor-pointer'
-                          : 'bg-dark-700/30 opacity-60'
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-mono text-dark-400">
-                          {cue.index}
-                        </span>
-                        <span className={cn(
-                          'w-1.5 h-1.5 rounded-full',
-                          STATUS_COLORS[cue.status]
-                        )} />
+                  {segmentCues.map((cue) => {
+                    const tc = getTargetCue(cue.id);
+                    return (
+                      <div
+                        key={cue.id}
+                        onClick={() => {
+                          if (canEdit) {
+                            setSelectedCueId(cue.id);
+                          }
+                        }}
+                        className={cn(
+                          'p-2 rounded-lg transition-colors',
+                          selectedCue?.id === cue.id
+                            ? 'bg-accent-500/20 border border-accent-500/30'
+                            : canEdit
+                            ? 'bg-dark-700/50 hover:bg-dark-700 cursor-pointer'
+                            : 'bg-dark-700/30 opacity-60'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-mono text-dark-400">
+                            {cue.index}
+                          </span>
+                          <span className={cn(
+                            'w-1.5 h-1.5 rounded-full',
+                            tc && tc.text ? 'bg-accent-500' : 'bg-dark-500'
+                          )} />
+                        </div>
+                        <p className="text-xs text-white/90 line-clamp-1">{cue.text}</p>
+                        {tc && tc.text && (
+                          <p className="text-xs text-accent-400/80 line-clamp-1 mt-1">{tc.text}</p>
+                        )}
                       </div>
-                      <p className="text-xs text-white/90 line-clamp-1">{cue.text}</p>
-                      {cue.translation && (
-                        <p className="text-xs text-accent-400/80 line-clamp-1 mt-1">{cue.translation}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="p-3 border-t border-white/5 flex gap-2">
@@ -424,7 +473,7 @@ export default function TranslateWorkbench() {
                   )}
                   {canEdit && (
                     <button
-                      onClick={() => addNotification('success', '区间标记为已完成')}
+                      onClick={() => handleCompleteSegment(segment.id)}
                       className="flex-1 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-colors"
                     >
                       完成

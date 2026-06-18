@@ -142,11 +142,11 @@ export default function VideoUpload() {
       await simulateUpload();
       await simulateRecognition();
       
-      const sampleVideo = 'https://www.w3schools.com/html/mov_bbb.mp4';
+      const finalVideoUrl = videoUrl;
       
       if (id && currentProject) {
         updateProject(id, {
-          videoUrl: sampleVideo,
+          videoUrl: finalVideoUrl,
           videoDuration: duration,
           sourceLanguage,
           targetLanguages,
@@ -157,11 +157,12 @@ export default function VideoUpload() {
         const newProject = generateNewProject(
           projectName,
           projectDesc,
-          sampleVideo,
+          finalVideoUrl,
           duration,
           sourceLanguage,
           targetLanguages
         );
+        newProject.status = 'editing';
         createProject(newProject);
         addNotification('success', '项目创建成功，已生成初始字幕');
         navigate(`/project/${newProject.id}/editor`);

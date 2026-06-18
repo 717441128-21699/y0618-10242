@@ -45,12 +45,20 @@ export default function PreviewPlayer() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [subtitleInitialized, setSubtitleInitialized] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchProject(id);
     }
   }, [id]);
+
+  useEffect(() => {
+    if (currentProject && !subtitleInitialized) {
+      setSelectedSubtitle(currentProject.sourceLanguage);
+      setSubtitleInitialized(true);
+    }
+  }, [currentProject, subtitleInitialized]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -213,7 +221,6 @@ export default function PreviewPlayer() {
     if (selectedSubtitle === 'off') return null;
 
     const cues = currentProject.subtitles[selectedSubtitle] || sourceCues;
-    const useTranslation = selectedSubtitle !== currentProject.sourceLanguage;
 
     const cue = cues.find(
       c => currentTime >= c.startTime && currentTime <= c.endTime
@@ -223,13 +230,17 @@ export default function PreviewPlayer() {
   };
 
   const currentCue = getCurrentCue();
-  const displayText = currentCue
-    ? (selectedSubtitle !== currentProject.sourceLanguage
-        ? currentCue.translation || currentCue.text
-        : currentCue.text)
-    : '';
+  const displayText = currentCue ? currentCue.text : '';
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const getLanguageCueCount = (lang: string): number => {
+    if (lang === currentProject.sourceLanguage) {
+      return sourceCues.filter(c => c.text && c.text.trim()).length;
+    }
+    const cues = currentProject.subtitles[lang] || [];
+    return cues.filter(c => c.text && c.text.trim()).length;
+  };
 
   const subtitleOptions = [
     { value: 'off', label: '关闭字幕' },
@@ -545,7 +556,7 @@ export default function PreviewPlayer() {
                   )}
                 </div>
                 <p className="text-xs text-dark-400">
-                  {sourceCues.filter(c => lang === currentProject.sourceLanguage || c.translation).length} 条字幕
+                  {getLanguageCueCount(lang)} 条字幕
                 </p>
               </motion.div>
             ))}

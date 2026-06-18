@@ -28,10 +28,10 @@ import { cn } from '../lib/utils';
 
 export default function ReviewWorkbench() {
   const { id } = useParams<{ id: string }>();
-  const { currentProject, loading, updateCue } = useProjectStore();
-  const { currentUser, users } = useUserStore();
+  const { currentProject, loading, updateCue, ensureTargetLanguage } = useProjectStore();
+  const { currentUser, recordReview } = useUserStore();
   const { addNotification } = useNotificationStore();
-  const { currentTime, setSelectedCueId, selectedCueId } = useEditorStore();
+  const { setSelectedCueId, selectedCueId } = useEditorStore();
 
   const [targetLanguage, setTargetLanguage] = useState('zh-CN');
   const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
@@ -63,11 +63,20 @@ export default function ReviewWorkbench() {
     );
   }
 
+  ensureTargetLanguage(currentProject.id, targetLanguage);
+
   const sourceCues = currentProject.subtitles[currentProject.sourceLanguage] || [];
-  const targetCues = currentProject.subtitles[targetLanguage] || sourceCues;
-  const reviewableCues = sourceCues.filter(c => c.status === 'translated' || c.status === 'edited' || c.status === 'reviewing');
+  const targetCues = currentProject.subtitles[targetLanguage] || [];
+
+  const getTargetCue = (cueId: string) => targetCues.find(c => c.id === cueId);
+
+  const reviewableCues = sourceCues.filter(c => {
+    const tc = getTargetCue(c.id);
+    return tc && tc.text && tc.text.trim().length > 0;
+  });
 
   const selectedCue = sourceCues.find(c => c.id === selectedCueId) || reviewableCues[0];
+  const selectedTargetCue = selectedCue ? getTargetCue(selectedCue.id) : undefined;
 
   const navigateCue = (direction: 'prev' | 'next') => {
     const currentIndex = reviewableCues.findIndex(c => c.id === selectedCueId);
@@ -94,10 +103,13 @@ export default function ReviewWorkbench() {
       reviewedAt: Date.now(),
     };
 
-    updateCue(currentProject.id, currentProject.sourceLanguage, cueId, {
+    updateCue(currentProject.id, targetLanguage, cueId, {
       status: 'approved',
       review,
     });
+
+    const avgScore = (accuracy + fluency + format) / 3;
+    recordReview(currentUser.id, currentProject.id, currentProject.name, avgScore, true);
 
     addNotification('success', '已通过该字幕');
     navigateCue('next');
@@ -125,10 +137,13 @@ export default function ReviewWorkbench() {
       reviewedAt: Date.now(),
     };
 
-    updateCue(currentProject.id, currentProject.sourceLanguage, cueId, {
+    updateCue(currentProject.id, targetLanguage, cueId, {
       status: 'rejected',
       review,
     });
+
+    const avgScore = (accuracy + fluency + format) / 3;
+    recordReview(currentUser.id, currentProject.id, currentProject.name, avgScore, false);
 
     addNotification('warning', '已驳回该字幕，请填写修改意见');
     navigateCue('next');
@@ -150,7 +165,7 @@ export default function ReviewWorkbench() {
       reviewedAt: Date.now(),
     };
 
-    updateCue(currentProject.id, currentProject.sourceLanguage, cueId, {
+    updateCue(currentProject.id, targetLanguage, cueId, {
       status: 'reviewing',
       review,
     });
@@ -267,20 +282,33 @@ export default function ReviewWorkbench() {
             <div className="glass-panel rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="w-5 h-5 text-accent-400" />
-                <h3 className="font-semibold text-white">译文</h3>
+                <h3 className="font-semibold text-white">译文 ({LANGUAGE_NAMES[targetLanguage]})</h3>
               </div>
 
-              {selectedCue && (
+              {selectedCue && selectedTargetCue && (
                 <motion.div
-                  key={`trans-${selectedCue.id}`}
+                  key={`trans-${selectedCue.id}-${targetLanguage}`}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="p-4 rounded-xl bg-accent-500/10 border border-accent-500/30"
                 >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={cn(
+                      'text-[10px] px-1.5 py-0.5 rounded text-white',
+                      STATUS_COLORS[selectedTargetCue.status]
+                    )}>
+                      {STATUS_LABELS[selectedTargetCue.status]}
+                    </span>
+                  </div>
                   <p className="text-lg text-accent-400 leading-relaxed">
-                    {selectedCue.translation || '暂无译文'}
+                    {selectedTargetCue.text || '暂无译文'}
                   </p>
                 </motion.div>
+              )}
+              {selectedCue && !selectedTargetCue?.text && (
+                <div className="p-4 rounded-xl bg-dark-700/50">
+                  <p className="text-dark-400 text-center">该语言暂无译文，请先在翻译工作台填写</p>
+                </div>
               )}
             </div>
           </div>
@@ -417,7 +445,9 @@ export default function ReviewWorkbench() {
           <div className="glass-panel rounded-xl p-3">
             <h4 className="text-sm font-semibold text-white mb-2">待审校列表</h4>
             <div className="space-y-2">
-              {reviewableCues.map((cue, index) => (
+              {reviewableCues.map((cue, index) => {
+                const tc = getTargetCue(cue.id);
+                return (
                 <motion.div
                   key={cue.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -441,55 +471,59 @@ export default function ReviewWorkbench() {
                     </span>
                     <span className={cn(
                       'w-2 h-2 rounded-full',
-                      cue.status === 'approved' ? 'bg-green-500' :
-                      cue.status === 'rejected' ? 'bg-warning-500' :
-                      cue.status === 'reviewing' ? 'bg-yellow-500' : 'bg-dark-500'
+                      tc?.status === 'approved' ? 'bg-green-500' :
+                      tc?.status === 'rejected' ? 'bg-warning-500' :
+                      tc?.status === 'reviewing' ? 'bg-yellow-500' : 'bg-dark-500'
                     )} />
                   </div>
                   <p className="text-xs text-white/90 line-clamp-1 mb-1">{cue.text}</p>
-                  <p className="text-xs text-accent-400/80 line-clamp-1">{cue.translation}</p>
-                  {cue.review && (
+                  <p className="text-xs text-accent-400/80 line-clamp-1">{tc?.text}</p>
+                  {tc?.review && (
                     <div className="flex items-center gap-1 mt-1">
                       <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                       <span className="text-[10px] text-yellow-400">
-                        {((cue.review.accuracyScore + cue.review.fluencyScore + cue.review.formatScore) / 3).toFixed(1)}
+                        {((tc.review.accuracyScore + tc.review.fluencyScore + tc.review.formatScore) / 3).toFixed(1)}
                       </span>
                     </div>
                   )}
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
           <div className="glass-panel rounded-xl p-3">
-            <h4 className="text-sm font-semibold text-white mb-3">统计概览</h4>
+            <h4 className="text-sm font-semibold text-white mb-3">统计概览 ({LANGUAGE_NAMES[targetLanguage]})</h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-dark-400">待审校</span>
                 <span className="text-sm text-white font-medium">
-                  {reviewableCues.filter(c => c.status !== 'approved' && c.status !== 'rejected').length}
+                  {reviewableCues.filter(c => {
+                    const tc = getTargetCue(c.id);
+                    return tc && tc.status !== 'approved' && tc.status !== 'rejected';
+                  }).length}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-dark-400">已通过</span>
                 <span className="text-sm text-green-400 font-medium">
-                  {sourceCues.filter(c => c.status === 'approved').length}
+                  {targetCues.filter(c => c.status === 'approved').length}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-dark-400">已驳回</span>
                 <span className="text-sm text-warning-400 font-medium">
-                  {sourceCues.filter(c => c.status === 'rejected').length}
+                  {targetCues.filter(c => c.status === 'rejected').length}
                 </span>
               </div>
               <div className="h-px bg-white/5 my-2" />
               <div className="flex items-center justify-between">
                 <span className="text-xs text-dark-400">平均评分</span>
                 <span className="text-sm text-yellow-400 font-medium">
-                  {sourceCues.filter(c => c.review).length > 0
-                    ? (sourceCues.filter(c => c.review).reduce((sum, c) =>
+                  {targetCues.filter(c => c.review).length > 0
+                    ? (targetCues.filter(c => c.review).reduce((sum, c) =>
                       sum + (c.review!.accuracyScore + c.review!.fluencyScore + c.review!.formatScore) / 3, 0
-                    ) / sourceCues.filter(c => c.review).length).toFixed(1)
+                    ) / targetCues.filter(c => c.review).length).toFixed(1)
                     : '-'
                   }
                 </span>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -24,7 +25,7 @@ import { useEditorStore as useEditorStoreImport } from '../store/editorStore';
 export default function SubtitleEditor() {
   const { id } = useParams<{ id: string }>();
   const { currentProject, loading, updateCue, claimSegment, releaseSegment } = useProjectStore();
-  const { currentUser } = useUserStore();
+  const { currentUser, recordEdit, recordClaim } = useUserStore();
   const { addNotification } = useNotificationStore();
   const { 
     selectedCueId, 
@@ -35,6 +36,7 @@ export default function SubtitleEditor() {
     showCollaborators,
     setShowCollaborators
   } = useEditorStore();
+  const [editedCues, setEditedCues] = useState<Set<string>>(new Set());
 
   if (loading) {
     return (
@@ -69,15 +71,24 @@ export default function SubtitleEditor() {
       endTime,
       status: 'editing',
     });
+    if (currentUser && !editedCues.has(cueId)) {
+      setEditedCues(new Set(editedCues).add(cueId));
+      recordEdit(currentUser.id, currentProject.id, currentProject.name, cueId);
+    }
   };
 
   const handleUpdateCue = (cueId: string, updates: Partial<typeof sourceCues[0]>) => {
     updateCue(currentProject.id, currentProject.sourceLanguage, cueId, updates);
+    if (currentUser && updates.text !== undefined && !editedCues.has(cueId)) {
+      setEditedCues(new Set(editedCues).add(cueId));
+      recordEdit(currentUser.id, currentProject.id, currentProject.name, cueId);
+    }
   };
 
   const handleClaimSegment = (segmentId: string) => {
     if (!currentUser) return;
     claimSegment(currentProject.id, segmentId, currentUser.id);
+    recordClaim(currentUser.id, currentProject.id, currentProject.name);
     addNotification('success', '已认领该区间，您现在可以开始编辑');
   };
 

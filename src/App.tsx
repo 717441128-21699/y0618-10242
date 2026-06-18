@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
-import Home from "@/pages/Home";
 import ProjectList from "@/pages/ProjectList";
 import ProjectDetail from "@/pages/ProjectDetail";
 import VideoUpload from "@/pages/VideoUpload";
@@ -20,6 +19,14 @@ export default function App() {
           element={
             <MainLayout>
               <ProjectList />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/create"
+          element={
+            <MainLayout>
+              <VideoUpload />
             </MainLayout>
           }
         />

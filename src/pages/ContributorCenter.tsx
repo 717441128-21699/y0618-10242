@@ -74,60 +74,40 @@ export default function ContributorCenter() {
     );
   }
 
-  const mockMonthlyStats = [
-    { month: '1月', lines: 120, score: 4.5, earnings: 240 },
-    { month: '2月', lines: 180, score: 4.7, earnings: 360 },
-    { month: '3月', lines: 210, score: 4.6, earnings: 420 },
-    { month: '4月', lines: 195, score: 4.8, earnings: 390 },
-    { month: '5月', lines: 240, score: 4.9, earnings: 480 },
-    { month: '6月', lines: 280, score: 4.7, earnings: 560 },
+  const stats = contributorStats[selectedUser.id];
+
+  const monthlyStats = stats?.monthlyStats?.map(m => ({
+    month: m.month,
+    lines: m.lines,
+    score: m.score,
+    earnings: m.earnings,
+  })) || [];
+
+  const projectStats = [
+    { name: '校对', value: stats?.linesEdited || 0, color: '#3B82F6' },
+    { name: '翻译', value: stats?.linesTranslated || 0, color: '#10B981' },
+    { name: '审校', value: stats?.linesReviewed || 0, color: '#EAB308' },
   ];
 
-  const mockProjectStats = [
-    { name: '校对', value: 45, color: '#3B82F6' },
-    { name: '翻译', value: 120, color: '#10B981' },
-    { name: '审校', value: 85, color: '#EAB308' },
-  ];
+  const recentProjects = stats?.recentProjects || [];
 
-  const mockRecentProjects = [
-    {
-      projectId: '1',
-      projectName: '科技前沿纪录片',
-      lines: 85,
-      role: 'translator',
-      score: 4.8,
-    },
-    {
-      projectId: '2',
-      projectName: '在线教育课程',
-      lines: 62,
-      role: 'editor',
-      score: 4.6,
-    },
-    {
-      projectId: '3',
-      projectName: '产品发布会',
-      lines: 48,
-      role: 'reviewer',
-      score: 4.9,
-    },
-  ];
-
-  const mockLeaderboard = users
-    .map(u => ({
-      ...u,
-      totalLines: Math.floor(Math.random() * 2000) + 500,
-      avgScore: (Math.random() * 1.5 + 3.5).toFixed(1),
-      earnings: Math.floor(Math.random() * 5000) + 1000,
-    }))
+  const leaderboard = users
+    .map(u => {
+      const s = contributorStats[u.id];
+      return {
+        ...u,
+        totalLines: s?.totalLines || 0,
+        avgScore: s ? s.averageQualityScore.toFixed(1) : '0.0',
+        earnings: s?.totalEarnings || 0,
+      };
+    })
     .sort((a, b) => b.totalLines - a.totalLines);
 
-  const currentRank = mockLeaderboard.findIndex(u => u.id === selectedUser.id) + 1;
-  const userStats = mockLeaderboard.find(u => u.id === selectedUser.id);
+  const currentRank = leaderboard.findIndex(u => u.id === selectedUser.id) + 1;
 
-  const totalLines = mockMonthlyStats.reduce((sum, m) => sum + m.lines, 0);
-  const avgScore = (mockMonthlyStats.reduce((sum, m) => sum + m.score, 0) / mockMonthlyStats.length).toFixed(1);
-  const totalEarnings = mockMonthlyStats.reduce((sum, m) => sum + m.earnings, 0);
+  const totalLines = stats?.totalLines || 0;
+  const avgScore = stats ? stats.averageQualityScore.toFixed(1) : '0.0';
+  const totalEarnings = stats?.totalEarnings || 0;
 
   return (
     <div className="space-y-4">
@@ -243,7 +223,7 @@ export default function ContributorCenter() {
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockMonthlyStats}>
+                <AreaChart data={monthlyStats}>
                   <defs>
                     <linearGradient id="colorLines" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#16C79A" stopOpacity={0.3} />
@@ -283,7 +263,7 @@ export default function ContributorCenter() {
               </h3>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={mockProjectStats}>
+                  <BarChart data={projectStats}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                     <XAxis dataKey="name" stroke="#64748B" fontSize={12} />
                     <YAxis stroke="#64748B" fontSize={12} />
@@ -296,7 +276,7 @@ export default function ContributorCenter() {
                       }}
                     />
                     <Bar dataKey="value" name="行数" radius={[4, 4, 0, 0]}>
-                      {mockProjectStats.map((entry, index) => (
+                      {projectStats.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Bar>
@@ -312,7 +292,7 @@ export default function ContributorCenter() {
               </h3>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={mockMonthlyStats}>
+                  <LineChart data={monthlyStats}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                     <XAxis dataKey="month" stroke="#64748B" fontSize={12} />
                     <YAxis stroke="#64748B" fontSize={12} domain={[3, 5]} />
@@ -345,7 +325,11 @@ export default function ContributorCenter() {
               最近参与项目
             </h3>
             <div className="space-y-3">
-              {mockRecentProjects.map((project, index) => (
+              {recentProjects.length === 0 ? (
+                <p className="text-sm text-dark-400 text-center py-8">
+                  暂无参与项目，开始认领字幕任务后这里会显示
+                </p>
+              ) : recentProjects.map((project, index) => (
                 <motion.div
                   key={project.projectId}
                   initial={{ opacity: 0, x: -20 }}
@@ -429,7 +413,7 @@ export default function ContributorCenter() {
                   <Target className="w-4 h-4" />
                   参与项目
                 </span>
-                <span className="text-white">{mockRecentProjects.length} 个</span>
+                <span className="text-white">{recentProjects.length} 个</span>
               </div>
             </div>
           </div>
@@ -473,7 +457,7 @@ export default function ContributorCenter() {
               贡献排行榜
             </h3>
             <div className="space-y-2">
-              {mockLeaderboard.slice(0, 5).map((user, index) => (
+              {leaderboard.slice(0, 5).map((user, index) => (
                 <motion.div
                   key={user.id}
                   initial={{ opacity: 0, x: 20 }}

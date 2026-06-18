@@ -19,8 +19,9 @@ import { useProjectStore } from '../store/projectStore';
 import { useUserStore } from '../store/userStore';
 import { useNotificationStore } from '../store/notificationStore';
 import StatusBadge from '../components/ui/StatusBadge';
-import { LANGUAGE_NAMES, type ExportOptions, type BurnOptions, type SubtitleCue } from '../types';
-import { exportSubtitles, exportToSRT, exportToVTT, exportToASS, downloadFile } from '../utils/subtitleExport';
+import { LANGUAGE_NAMES, type ExportOptions, type BurnOptions } from '../types';
+import { exportToSRT, exportToVTT, exportToASS, downloadFile } from '../utils/subtitleExport';
+import { burnSubtitlesToVideo, downloadBlob } from '../utils/subtitleBurn';
 import { formatTime } from '../utils/time';
 import VideoPlayer from '../components/video/VideoPlayer';
 import { cn } from '../lib/utils';
@@ -38,6 +39,8 @@ export default function ExportCenter() {
   const [exporting, setExporting] = useState(false);
   const [burning, setBurning] = useState(false);
   const [burnProgress, setBurnProgress] = useState(0);
+  const [burnStatus, setBurnStatus] = useState('');
+  const [burnResult, setBurnResult] = useState<{ url: string; filename: string } | null>(null);
 
   const [burnOptions, setBurnOptions] = useState<BurnOptions>({
     language: 'zh-CN',
@@ -76,7 +79,16 @@ export default function ExportCenter() {
   }
 
   const sourceCues = currentProject.subtitles[currentProject.sourceLanguage] || [];
-  const approvedCues = sourceCues.filter(c => c.status === 'approved' || c.status === 'translated' || c.status === 'edited');
+
+  const getCuesForLanguage = (lang: string) => {
+    if (lang === currentProject.sourceLanguage) {
+      return sourceCues.filter(c => c.text && c.text.trim().length > 0);
+    }
+    const cues = currentProject.subtitles[lang] || [];
+    return cues.filter(c => c.text && c.text.trim().length > 0);
+  };
+
+  const approvedCues = getCuesForLanguage(selectedLanguage);
 
   const handleExportSubtitles = () => {
     const options: ExportOptions = {
@@ -90,24 +102,24 @@ export default function ExportCenter() {
 
     setTimeout(() => {
       try {
-        const useTranslation = selectedLanguage !== currentProject.sourceLanguage;
+        const cuesForExport = getCuesForLanguage(selectedLanguage);
         let content: string;
         let filename: string;
         let mimeType: string;
 
         switch (exportFormat) {
           case 'srt':
-            content = exportToSRT(approvedCues, useTranslation);
+            content = exportToSRT(cuesForExport, false);
             filename = `${currentProject.name}_${LANGUAGE_NAMES[selectedLanguage]}.srt`;
             mimeType = 'text/plain';
             break;
           case 'vtt':
-            content = exportToVTT(approvedCues, useTranslation);
+            content = exportToVTT(cuesForExport, false);
             filename = `${currentProject.name}_${LANGUAGE_NAMES[selectedLanguage]}.vtt`;
             mimeType = 'text/vtt';
             break;
           case 'ass':
-            content = exportToASS(approvedCues, useTranslation);
+            content = exportToASS(cuesForExport, false);
             filename = `${currentProject.name}_${LANGUAGE_NAMES[selectedLanguage]}.ass`;
             mimeType = 'text/plain';
             break;
@@ -131,8 +143,9 @@ export default function ExportCenter() {
 
       languages.forEach((lang, index) => {
         setTimeout(() => {
-          const useTranslation = lang !== currentProject.sourceLanguage;
-          const content = exportToSRT(approvedCues, useTranslation);
+          const cuesForExport = getCuesForLanguage(lang);
+          if (cuesForExport.length === 0) return;
+          const content = exportToSRT(cuesForExport, false);
           const filename = `${currentProject.name}_${LANGUAGE_NAMES[lang]}.srt`;
           downloadFile(content, filename, 'text/plain');
         }, index * 300);
@@ -143,33 +156,42 @@ export default function ExportCenter() {
     }, 500);
   };
 
-  const handleBurnSubtitles = () => {
+  const handleBurnSubtitles = async () => {
     setBurning(true);
     setBurnProgress(0);
+    setBurnResult(null);
 
-    const totalSteps = 10;
-    let currentStep = 0;
+    try {
+      const cuesForBurn = getCuesForLanguage(burnOptions.language);
 
-    const interval = setInterval(() => {
-      currentStep++;
-      setBurnProgress(Math.floor((currentStep / totalSteps) * 100));
-
-      if (currentStep >= totalSteps) {
-        clearInterval(interval);
-        setTimeout(() => {
-          setBurning(false);
-          setBurnProgress(100);
-          addNotification('success', '字幕烧录完成，视频已准备好下载');
-
-          const link = document.createElement('a');
-          link.href = currentProject.videoUrl;
-          link.download = `${currentProject.name}_with_subtitles.mp4`;
-          link.click();
-
-          setTimeout(() => setBurnProgress(0), 2000);
-        }, 500);
+      if (cuesForBurn.length === 0) {
+        addNotification('warning', `${LANGUAGE_NAMES[burnOptions.language]} 暂无字幕内容，请先完成该语言的翻译`);
+        setBurning(false);
+        return;
       }
-    }, 300);
+
+      const blob = await burnSubtitlesToVideo(
+        currentProject.videoUrl,
+        cuesForBurn,
+        burnOptions,
+        {
+          onProgress: (progress) => setBurnProgress(progress),
+          onStatus: (status) => setBurnStatus(status),
+        }
+      );
+
+      const filename = `${currentProject.name}_${LANGUAGE_NAMES[burnOptions.language]}_烧录.webm`;
+      downloadBlob(blob, filename);
+      setBurnResult({ url: URL.createObjectURL(blob), filename });
+      addNotification('success', '字幕烧录完成，带字幕视频已开始下载');
+    } catch (error) {
+      console.error(error);
+      addNotification('error', '字幕烧录失败，可能是视频跨域限制，请尝试使用本地上传的视频');
+      setBurnProgress(0);
+    } finally {
+      setBurning(false);
+      setBurnStatus('');
+    }
   };
 
   const formatOptions = [
@@ -498,7 +520,9 @@ export default function ExportCenter() {
                 {burning && (
                   <div className="p-4 rounded-xl bg-accent-500/10 border border-accent-500/30">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-accent-400">正在烧录字幕...</span>
+                      <span className="text-sm text-accent-400">
+                        {burnStatus || '正在烧录字幕...'}
+                      </span>
                       <span className="text-sm text-accent-400">{burnProgress}%</span>
                     </div>
                     <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
@@ -508,17 +532,41 @@ export default function ExportCenter() {
                         animate={{ width: `${burnProgress}%` }}
                       />
                     </div>
+                    <p className="text-xs text-dark-400 mt-2">
+                      正在逐帧渲染视频并叠加 {LANGUAGE_NAMES[burnOptions.language]} 字幕，位置：{burnOptions.position === 'top' ? '顶部' : burnOptions.position === 'middle' ? '居中' : '底部'}，请勿关闭页面
+                    </p>
                   </div>
                 )}
 
-                {burnProgress === 100 && !burning && (
+                {burnResult && !burning && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-xl bg-green-500/10 border border-green-500/30 flex items-center gap-3"
+                    className="p-4 rounded-xl bg-green-500/10 border border-green-500/30 space-y-3"
                   >
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    <span className="text-sm text-green-400">字幕烧录完成！视频已开始下载</span>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                      <span className="text-sm text-green-400">字幕烧录完成！带字幕视频已开始下载</span>
+                    </div>
+                    <div className="rounded-lg overflow-hidden bg-black">
+                      <video
+                        src={burnResult.url}
+                        controls
+                        className="w-full max-h-64"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = burnResult.url;
+                        link.download = burnResult.filename;
+                        link.click();
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      重新下载 {burnResult.filename}
+                    </button>
                   </motion.div>
                 )}
 
@@ -570,7 +618,7 @@ export default function ExportCenter() {
           </div>
 
           <div className="glass-panel rounded-xl p-3">
-            <h4 className="text-sm font-semibold text-white mb-3">字幕预览</h4>
+            <h4 className="text-sm font-semibold text-white mb-3">字幕预览 ({LANGUAGE_NAMES[selectedLanguage]})</h4>
             <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
               {approvedCues.slice(0, 10).map((cue, index) => (
                 <motion.div
@@ -587,11 +635,13 @@ export default function ExportCenter() {
                     <CheckCircle className="w-3 h-3 text-green-400" />
                   </div>
                   <p className="text-xs text-white/90 line-clamp-1">{cue.text}</p>
-                  {selectedLanguage !== currentProject.sourceLanguage && cue.translation && (
-                    <p className="text-xs text-accent-400/80 line-clamp-1 mt-1">{cue.translation}</p>
-                  )}
                 </motion.div>
               ))}
+              {approvedCues.length === 0 && (
+                <p className="text-xs text-center text-dark-400 py-4">
+                  该语言暂无可导出的字幕
+                </p>
+              )}
               {approvedCues.length > 10 && (
                 <p className="text-xs text-center text-dark-400 py-2">
                   还有 {approvedCues.length - 10} 条字幕...

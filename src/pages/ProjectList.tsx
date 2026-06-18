@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -22,6 +22,7 @@ import { LANGUAGE_NAMES } from '../types';
 import { cn } from '../lib/utils';
 
 export default function ProjectList() {
+  const navigate = useNavigate();
   const { projects, deleteProject } = useProjectStore();
   const { addNotification } = useNotificationStore();
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,6 +78,7 @@ export default function ProjectList() {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
+          onClick={() => navigate('/create')}
           className="flex items-center gap-2 px-5 py-2.5 bg-accent-600 hover:bg-accent-500 text-white rounded-lg font-medium transition-colors glow-accent"
         >
           <Plus className="w-5 h-5" />

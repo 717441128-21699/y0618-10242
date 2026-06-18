@@ -77,10 +77,16 @@ export interface ContributorStats {
   totalProjects: number;
   averageQualityScore: number;
   totalEarnings: number;
+  linesEdited: number;
+  linesTranslated: number;
+  linesReviewed: number;
+  qualityScores: number[];
+  processedCueIds: string[];
   monthlyStats: {
     month: string;
     lines: number;
     score: number;
+    earnings: number;
   }[];
   recentProjects: {
     projectId: string;

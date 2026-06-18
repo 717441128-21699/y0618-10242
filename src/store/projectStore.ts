@@ -16,6 +16,8 @@ interface ProjectState {
   deleteProject: (id: string) => void;
   
   updateCue: (projectId: string, lang: string, cueId: string, updates: Partial<SubtitleCue>) => void;
+  ensureTargetLanguage: (projectId: string, lang: string) => void;
+  updateTranslation: (projectId: string, targetLang: string, cueId: string, text: string, status?: SubtitleStatus) => void;
   claimSegment: (projectId: string, segmentId: string, userId: string) => void;
   releaseSegment: (projectId: string, segmentId: string) => void;
   completeSegment: (projectId: string, segmentId: string) => void;
@@ -110,6 +112,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           }
         : state.currentProject,
     }));
+  },
+
+  ensureTargetLanguage: (projectId: string, lang: string) => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const projects: Project[] = stored ? JSON.parse(stored) : [];
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    if (project.subtitles[lang] && project.subtitles[lang].length > 0) return;
+
+    const sourceCues = project.subtitles[project.sourceLanguage] || [];
+    const newCues: SubtitleCue[] = sourceCues.map(c => ({
+      ...c,
+      text: '',
+      translation: undefined,
+      status: 'unclaimed' as const,
+      claimedBy: undefined,
+      review: undefined,
+    }));
+
+    const updated = projects.map(p =>
+      p.id === projectId
+        ? { ...p, subtitles: { ...p.subtitles, [lang]: newCues } }
+        : p
+    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+
+    set(state => ({
+      projects: updated,
+      currentProject: state.currentProject?.id === projectId
+        ? {
+            ...state.currentProject,
+            subtitles: { ...state.currentProject.subtitles, [lang]: newCues },
+          }
+        : state.currentProject,
+    }));
+  },
+
+  updateTranslation: (projectId: string, targetLang: string, cueId: string, text: string, status?: SubtitleStatus) => {
+    get().ensureTargetLanguage(projectId, targetLang);
+    get().updateCue(projectId, targetLang, cueId, {
+      text,
+      status: status || 'translated',
+    });
   },
 
   claimSegment: (projectId: string, segmentId: string, userId: string) => {

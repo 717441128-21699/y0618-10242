@@ -198,13 +198,18 @@ export const mockContributorStats: Record<string, ContributorStats> = {
     totalProjects: 8,
     averageQualityScore: 92.5,
     totalEarnings: 2450.50,
+    linesEdited: 480,
+    linesTranslated: 530,
+    linesReviewed: 240,
+    qualityScores: [4.5, 4.7, 4.6, 4.8, 4.9],
+    processedCueIds: [],
     monthlyStats: [
-      { month: '2026-01', lines: 180, score: 90 },
-      { month: '2026-02', lines: 220, score: 91.5 },
-      { month: '2026-03', lines: 280, score: 93 },
-      { month: '2026-04', lines: 310, score: 92 },
-      { month: '2026-05', lines: 260, score: 94 },
-      { month: '2026-06', lines: 240, score: 92.5 },
+      { month: '2026-01', lines: 180, score: 90, earnings: 360 },
+      { month: '2026-02', lines: 220, score: 91.5, earnings: 440 },
+      { month: '2026-03', lines: 280, score: 93, earnings: 560 },
+      { month: '2026-04', lines: 310, score: 92, earnings: 620 },
+      { month: '2026-05', lines: 260, score: 94, earnings: 520 },
+      { month: '2026-06', lines: 240, score: 92.5, earnings: 480 },
     ],
     recentProjects: [
       { projectId: 'proj-004', projectName: '在线课程：数据科学基础', lines: 400, role: 'admin', score: 95 },
@@ -218,13 +223,18 @@ export const mockContributorStats: Record<string, ContributorStats> = {
     totalProjects: 5,
     averageQualityScore: 88.7,
     totalEarnings: 1567.80,
+    linesEdited: 0,
+    linesTranslated: 890,
+    linesReviewed: 0,
+    qualityScores: [4.2, 4.5, 4.4, 4.6, 4.3],
+    processedCueIds: [],
     monthlyStats: [
-      { month: '2026-01', lines: 120, score: 85 },
-      { month: '2026-02', lines: 150, score: 87 },
-      { month: '2026-03', lines: 180, score: 89 },
-      { month: '2026-04', lines: 200, score: 90 },
-      { month: '2026-05', lines: 170, score: 88 },
-      { month: '2026-06', lines: 170, score: 92 },
+      { month: '2026-01', lines: 120, score: 85, earnings: 360 },
+      { month: '2026-02', lines: 150, score: 87, earnings: 450 },
+      { month: '2026-03', lines: 180, score: 89, earnings: 540 },
+      { month: '2026-04', lines: 200, score: 90, earnings: 600 },
+      { month: '2026-05', lines: 170, score: 88, earnings: 510 },
+      { month: '2026-06', lines: 170, score: 92, earnings: 510 },
     ],
     recentProjects: [
       { projectId: 'proj-004', projectName: '在线课程：数据科学基础', lines: 320, role: 'translator', score: 90 },
@@ -256,6 +266,25 @@ export function initializeMockData(): void {
 
 export function generateNewProject(name: string, description: string, videoUrl: string, duration: number, sourceLang: string, targetLangs: string[]): Project {
   const cueCount = Math.max(20, Math.floor(duration / 8000));
+  const sourceCues = generateMockSubtitles(cueCount, sourceLang);
+
+  const subtitles: Record<string, SubtitleCue[]> = {
+    [sourceLang]: sourceCues,
+  };
+
+  targetLangs.forEach((lang) => {
+    if (lang !== sourceLang) {
+      subtitles[lang] = sourceCues.map((cue) => ({
+        ...cue,
+        text: '',
+        translation: undefined,
+        status: 'unclaimed' as const,
+        claimedBy: undefined,
+        review: undefined,
+      }));
+    }
+  });
+
   return {
     id: uuidv4(),
     name,
@@ -264,13 +293,11 @@ export function generateNewProject(name: string, description: string, videoUrl: 
     videoDuration: duration,
     sourceLanguage: sourceLang,
     targetLanguages: targetLangs,
-    status: 'processing',
+    status: 'editing',
     createdAt: Date.now(),
     createdBy: localStorage.getItem(STORAGE_KEY_CURRENT_USER) || 'user-001',
     members: [localStorage.getItem(STORAGE_KEY_CURRENT_USER) || 'user-001'],
-    subtitles: {
-      [sourceLang]: generateMockSubtitles(cueCount, sourceLang),
-    },
+    subtitles,
     segments: generateMockSegments(cueCount, Math.max(5, Math.floor(cueCount / 10))),
   };
 }
