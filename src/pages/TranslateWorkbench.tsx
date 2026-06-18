@@ -24,7 +24,7 @@ import { cn } from '../lib/utils';
 
 export default function TranslateWorkbench() {
   const { id } = useParams<{ id: string }>();
-  const { currentProject, loading, updateTranslation, claimSegment, releaseSegment, ensureTargetLanguage, completeSegment } = useProjectStore();
+  const { currentProject, loading, updateTranslation, claimSegment, releaseSegment, ensureTargetLanguage, completeSegment, fetchProject } = useProjectStore();
   const { currentUser, users, recordTranslation } = useUserStore();
   const { addNotification } = useNotificationStore();
   const { setSelectedCueId, selectedCueId } = useEditorStore();
@@ -34,6 +34,18 @@ export default function TranslateWorkbench() {
   const [draftText, setDraftText] = useState('');
   const [lastSavedCueId, setLastSavedCueId] = useState<string | null>(null);
   const [lastSavedLang, setLastSavedLang] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) {
+      fetchProject(id);
+    }
+  }, [id, fetchProject]);
+
+  useEffect(() => {
+    if (currentProject && currentProject.targetLanguages.length > 0) {
+      setTargetLanguage(currentProject.targetLanguages[0]);
+    }
+  }, [currentProject?.id]);
 
   useEffect(() => {
     if (currentProject) {
@@ -97,7 +109,7 @@ export default function TranslateWorkbench() {
     if (trimmed) {
       updateTranslation(currentProject.id, targetLanguage, selectedCue.id, trimmed, 'translated');
       if (currentUser && (lastSavedCueId !== selectedCue.id || lastSavedLang !== targetLanguage)) {
-        recordTranslation(currentUser.id, currentProject.id, currentProject.name, selectedCue.id);
+        recordTranslation(currentUser.id, currentProject.id, currentProject.name, selectedCue.id, targetLanguage);
         setLastSavedCueId(selectedCue.id);
         setLastSavedLang(targetLanguage);
       }
@@ -377,7 +389,7 @@ export default function TranslateWorkbench() {
         <div className="space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto scrollbar-thin pr-2">
           {currentProject.segments.map((segment, index) => {
             const segmentCues = sourceCues.filter(
-              c => c.index >= segment.startCueIndex && c.index <= segment.endCueIndex
+              c => c.index >= segment.startCueIndex + 1 && c.index <= segment.endCueIndex + 1
             );
             const claimedUser = users.find(u => u.id === segment.claimedBy);
             const canEdit = canEditSegment(segment.id);
@@ -438,7 +450,7 @@ export default function TranslateWorkbench() {
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[10px] font-mono text-dark-400">
-                            {cue.index}
+                            #{cue.index}
                           </span>
                           <span className={cn(
                             'w-1.5 h-1.5 rounded-full',

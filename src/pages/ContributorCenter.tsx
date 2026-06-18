@@ -109,6 +109,18 @@ export default function ContributorCenter() {
   const avgScore = stats ? stats.averageQualityScore.toFixed(1) : '0.0';
   const totalEarnings = stats?.totalEarnings || 0;
 
+  const getMonthKey = (d: Date) => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const currentMonthKey = getMonthKey(new Date());
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonthKey = getMonthKey(lastMonthDate);
+
+  const currentMonthEarnings = stats?.monthlyStats?.find(m => m.month === currentMonthKey)?.earnings || 0;
+  const lastMonthEarnings = stats?.monthlyStats?.find(m => m.month === lastMonthKey)?.earnings || 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -507,16 +519,16 @@ export default function ContributorCenter() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-dark-400">本月预估</span>
-                <span className="text-lg font-bold text-green-400">¥560.00</span>
+                <span className="text-lg font-bold text-green-400">¥{currentMonthEarnings.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-dark-400">上月结算</span>
-                <span className="text-sm text-white">¥480.00</span>
+                <span className="text-sm text-white">¥{lastMonthEarnings.toFixed(2)}</span>
               </div>
               <div className="h-px bg-white/5" />
               <div className="flex items-center justify-between">
                 <span className="text-sm text-dark-400">累计收益</span>
-                <span className="text-sm text-white">¥2,450.00</span>
+                <span className="text-sm text-white">¥{totalEarnings.toFixed(2)}</span>
               </div>
               <div className="pt-2">
                 <div className="text-xs text-dark-400 mb-2">计费规则</div>

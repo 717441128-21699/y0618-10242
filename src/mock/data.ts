@@ -85,7 +85,7 @@ export const mockUsers: User[] = [
   },
 ];
 
-function generateMockSubtitles(count: number, lang: string): SubtitleCue[] {
+function generateMockSubtitles(count: number, lang: string, segmentSize: number = 10): SubtitleCue[] {
   const samples = lang === 'en' ? enSamples : zhSamples;
   return Array.from({ length: count }, (_, i) => ({
     id: `cue-${i + 1}`,
@@ -96,7 +96,7 @@ function generateMockSubtitles(count: number, lang: string): SubtitleCue[] {
     translation: lang !== 'en' ? samples[i % samples.length] : undefined,
     status: i < count * 0.3 ? 'approved' : i < count * 0.5 ? 'translated' : i < count * 0.7 ? 'edited' : 'unclaimed',
     claimedBy: i < count * 0.5 ? `user-${String((i % 4) + 2).padStart(3, '0')}` : undefined,
-    segmentId: `seg-${Math.floor(i / 10) + 1}`,
+    segmentId: `seg-${Math.floor(i / segmentSize) + 1}`,
   }));
 }
 
@@ -130,8 +130,8 @@ export const mockProjects: Project[] = [
     createdBy: 'user-001',
     members: ['user-001', 'user-002', 'user-003', 'user-004'],
     subtitles: {
-      'en': generateMockSubtitles(60, 'en'),
-      'zh-CN': generateMockSubtitles(60, 'zh-CN'),
+      'en': generateMockSubtitles(60, 'en', 10),
+      'zh-CN': generateMockSubtitles(60, 'zh-CN', 10),
     },
     segments: generateMockSegments(60, 10),
   },
@@ -148,8 +148,8 @@ export const mockProjects: Project[] = [
     createdBy: 'user-001',
     members: ['user-001', 'user-002', 'user-005'],
     subtitles: {
-      'zh-CN': generateMockSubtitles(35, 'zh-CN'),
-      'en': generateMockSubtitles(35, 'en'),
+      'zh-CN': generateMockSubtitles(35, 'zh-CN', 7),
+      'en': generateMockSubtitles(35, 'en', 7),
     },
     segments: generateMockSegments(35, 7),
   },
@@ -166,8 +166,8 @@ export const mockProjects: Project[] = [
     createdBy: 'user-001',
     members: ['user-001', 'user-003', 'user-004'],
     subtitles: {
-      'en': generateMockSubtitles(120, 'en'),
-      'zh-CN': generateMockSubtitles(120, 'zh-CN'),
+      'en': generateMockSubtitles(120, 'en', 15),
+      'zh-CN': generateMockSubtitles(120, 'zh-CN', 15),
     },
     segments: generateMockSegments(120, 15),
   },
@@ -184,8 +184,8 @@ export const mockProjects: Project[] = [
     createdBy: 'user-001',
     members: ['user-001', 'user-002', 'user-003', 'user-004', 'user-005'],
     subtitles: {
-      'en': generateMockSubtitles(200, 'en'),
-      'zh-CN': generateMockSubtitles(200, 'zh-CN'),
+      'en': generateMockSubtitles(200, 'en', 20),
+      'zh-CN': generateMockSubtitles(200, 'zh-CN', 20),
     },
     segments: generateMockSegments(200, 20),
   },
@@ -266,7 +266,8 @@ export function initializeMockData(): void {
 
 export function generateNewProject(name: string, description: string, videoUrl: string, duration: number, sourceLang: string, targetLangs: string[]): Project {
   const cueCount = Math.max(20, Math.floor(duration / 8000));
-  const sourceCues = generateMockSubtitles(cueCount, sourceLang);
+  const segmentSize = Math.max(5, Math.floor(cueCount / 10));
+  const sourceCues = generateMockSubtitles(cueCount, sourceLang, segmentSize);
 
   const subtitles: Record<string, SubtitleCue[]> = {
     [sourceLang]: sourceCues,
@@ -274,7 +275,7 @@ export function generateNewProject(name: string, description: string, videoUrl: 
 
   targetLangs.forEach((lang) => {
     if (lang !== sourceLang) {
-      subtitles[lang] = sourceCues.map((cue) => ({
+      subtitles[lang] = generateMockSubtitles(cueCount, lang, segmentSize).map((cue) => ({
         ...cue,
         text: '',
         translation: undefined,
@@ -298,6 +299,6 @@ export function generateNewProject(name: string, description: string, videoUrl: 
     createdBy: localStorage.getItem(STORAGE_KEY_CURRENT_USER) || 'user-001',
     members: [localStorage.getItem(STORAGE_KEY_CURRENT_USER) || 'user-001'],
     subtitles,
-    segments: generateMockSegments(cueCount, Math.max(5, Math.floor(cueCount / 10))),
+    segments: generateMockSegments(cueCount, segmentSize),
   };
 }

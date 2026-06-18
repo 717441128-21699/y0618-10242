@@ -99,7 +99,7 @@ interface UserState {
 
   recordClaim: (userId: string, projectId: string, projectName: string) => void;
   recordEdit: (userId: string, projectId: string, projectName: string, cueId: string) => void;
-  recordTranslation: (userId: string, projectId: string, projectName: string, cueId: string) => void;
+  recordTranslation: (userId: string, projectId: string, projectName: string, cueId: string, language: string) => void;
   recordReview: (userId: string, projectId: string, projectName: string, score: number, approved: boolean) => void;
 }
 
@@ -155,10 +155,11 @@ export const useUserStore = create<UserState>((set) => ({
   recordEdit: (userId, projectId, projectName, cueId) => {
     const allStats = loadStats();
     let stats = allStats[userId] || createEmptyStats(userId);
-    if (stats.processedCueIds.includes(`edit-${cueId}`)) return;
+    const editKey = `edit-${projectId}-${cueId}`;
+    if (stats.processedCueIds.includes(editKey)) return;
     stats = {
       ...stats,
-      processedCueIds: [...stats.processedCueIds, `edit-${cueId}`],
+      processedCueIds: [...stats.processedCueIds, editKey],
       linesEdited: stats.linesEdited + 1,
       totalLines: stats.totalLines + 1,
       totalEarnings: stats.totalEarnings + RATE_EDIT,
@@ -170,13 +171,14 @@ export const useUserStore = create<UserState>((set) => ({
     set({ contributorStats: allStats });
   },
 
-  recordTranslation: (userId, projectId, projectName, cueId) => {
+  recordTranslation: (userId, projectId, projectName, cueId, language) => {
     const allStats = loadStats();
     let stats = allStats[userId] || createEmptyStats(userId);
-    if (stats.processedCueIds.includes(`trans-${cueId}`)) return;
+    const transKey = `trans-${projectId}-${language}-${cueId}`;
+    if (stats.processedCueIds.includes(transKey)) return;
     stats = {
       ...stats,
-      processedCueIds: [...stats.processedCueIds, `trans-${cueId}`],
+      processedCueIds: [...stats.processedCueIds, transKey],
       linesTranslated: stats.linesTranslated + 1,
       totalLines: stats.totalLines + 1,
       totalEarnings: stats.totalEarnings + RATE_TRANSLATE,

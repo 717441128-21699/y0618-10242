@@ -145,13 +145,34 @@ export default function ExportCenter() {
         setTimeout(() => {
           const cuesForExport = getCuesForLanguage(lang);
           if (cuesForExport.length === 0) return;
-          const content = exportToSRT(cuesForExport, false);
-          const filename = `${currentProject.name}_${LANGUAGE_NAMES[lang]}.srt`;
-          downloadFile(content, filename, 'text/plain');
+
+          let content = '';
+          let filename = '';
+          let mimeType = 'text/plain';
+
+          switch (exportFormat) {
+            case 'srt':
+              content = exportToSRT(cuesForExport, false);
+              filename = `${currentProject.name}_${LANGUAGE_NAMES[lang]}.srt`;
+              mimeType = 'text/plain';
+              break;
+            case 'vtt':
+              content = exportToVTT(cuesForExport, false);
+              filename = `${currentProject.name}_${LANGUAGE_NAMES[lang]}.vtt`;
+              mimeType = 'text/vtt';
+              break;
+            case 'ass':
+              content = exportToASS(cuesForExport, false);
+              filename = `${currentProject.name}_${LANGUAGE_NAMES[lang]}.ass`;
+              mimeType = 'text/plain';
+              break;
+          }
+
+          downloadFile(content, filename, mimeType);
         }, index * 300);
       });
 
-      addNotification('success', `已导出 ${languages.length} 个语言版本的字幕`);
+      addNotification('success', `已导出 ${languages.length} 个语言版本的 ${exportFormat.toUpperCase()} 字幕`);
       setExporting(false);
     }, 500);
   };

@@ -53,7 +53,7 @@ export default function SubtitleList({
   };
 
   const getCuesForSegment = (segment: SubtitleSegment) => {
-    return cues.filter(c => c.index >= segment.startCueIndex && c.index <= segment.endCueIndex);
+    return cues.filter(c => c.index >= segment.startCueIndex + 1 && c.index <= segment.endCueIndex + 1);
   };
 
   const isSegmentClaimedByCurrentUser = (segment: SubtitleSegment) => {
@@ -211,7 +211,7 @@ export default function SubtitleList({
                           <div className="flex items-start gap-3">
                             <div className="flex flex-col items-center gap-1 pt-1">
                               <span className="text-xs font-display font-bold text-dark-400">
-                                {cue.index}
+                                #{cue.index}
                               </span>
                               <span className={cn(
                                 'w-2 h-2 rounded-full',

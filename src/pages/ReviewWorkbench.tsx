@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -28,7 +28,7 @@ import { cn } from '../lib/utils';
 
 export default function ReviewWorkbench() {
   const { id } = useParams<{ id: string }>();
-  const { currentProject, loading, updateCue, ensureTargetLanguage } = useProjectStore();
+  const { currentProject, loading, fetchProject, updateCue, ensureTargetLanguage } = useProjectStore();
   const { currentUser, recordReview } = useUserStore();
   const { addNotification } = useNotificationStore();
   const { setSelectedCueId, selectedCueId } = useEditorStore();
@@ -38,6 +38,24 @@ export default function ReviewWorkbench() {
   const [accuracyScores, setAccuracyScores] = useState<Record<string, number>>({});
   const [fluencyScores, setFluencyScores] = useState<Record<string, number>>({});
   const [formatScores, setFormatScores] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (id) {
+      fetchProject(id);
+    }
+  }, [id, fetchProject]);
+
+  useEffect(() => {
+    if (currentProject && currentProject.targetLanguages.length > 0) {
+      setTargetLanguage(currentProject.targetLanguages[0]);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
+    if (currentProject) {
+      ensureTargetLanguage(currentProject.id, targetLanguage);
+    }
+  }, [currentProject, targetLanguage, ensureTargetLanguage]);
 
   if (loading) {
     return (
@@ -62,8 +80,6 @@ export default function ReviewWorkbench() {
       </div>
     );
   }
-
-  ensureTargetLanguage(currentProject.id, targetLanguage);
 
   const sourceCues = currentProject.subtitles[currentProject.sourceLanguage] || [];
   const targetCues = currentProject.subtitles[targetLanguage] || [];

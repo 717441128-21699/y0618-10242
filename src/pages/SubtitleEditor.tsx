@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -24,7 +24,7 @@ import { useEditorStore as useEditorStoreImport } from '../store/editorStore';
 
 export default function SubtitleEditor() {
   const { id } = useParams<{ id: string }>();
-  const { currentProject, loading, updateCue, claimSegment, releaseSegment } = useProjectStore();
+  const { currentProject, loading, updateCue, claimSegment, releaseSegment, fetchProject } = useProjectStore();
   const { currentUser, recordEdit, recordClaim } = useUserStore();
   const { addNotification } = useNotificationStore();
   const { 
@@ -37,6 +37,12 @@ export default function SubtitleEditor() {
     setShowCollaborators
   } = useEditorStore();
   const [editedCues, setEditedCues] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (id) {
+      fetchProject(id);
+    }
+  }, [id, fetchProject]);
 
   if (loading) {
     return (
